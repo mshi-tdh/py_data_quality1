@@ -1,0 +1,8 @@
+rule_dimensions:
+  - timeliness
+  - accuracy
+  - integrity
+  - conformity
+  - completeness
+  - uniqueness
+  - validity

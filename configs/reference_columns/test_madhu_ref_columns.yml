@@ -1,0 +1,6 @@
+reference_columns:
+  TEST_DATA_REFERENCE_COLUMNS:
+    include_reference_columns:
+      - group_id
+      - dupe_col1
+      - dupe_col2

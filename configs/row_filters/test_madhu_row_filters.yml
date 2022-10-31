@@ -1,0 +1,11 @@
+row_filters:
+  UPDATED_TS:
+    filter_sql_expr: updated_at > $upper_bound
+  NONE:
+    filter_sql_expr: |-
+      AND True
+  RF_MONTHLY_MEMBER_ELIGIBILITY_SNAPSHOT:
+    filter_sql_expr: |-
+      AND report_category_nm = '-1'
+      AND group_id <> '-1'
+

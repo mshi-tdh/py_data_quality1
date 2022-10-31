@@ -1,0 +1,9 @@
+entities:
+  TEST_MONTHLY_MEMBER_ELIGIBILITY_SNAPSHOT:
+    table_name: monthly_member_eligibility_snapshot
+    columns:
+      UPDATED_AT:
+        name: updated_at
+        data_type: TIMESTAMP
+  daily_member_eligibility_snapshot:
+    table_name: daily_member_eligibility_snapshot

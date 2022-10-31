@@ -1,0 +1,57 @@
+rule_bindings:
+  bind_table_checks:
+    entity_id: TEST_MONTHLY_MEMBER_ELIGIBILITY_SNAPSHOT
+    row_filter_id: RF_MONTHLY_MEMBER_ELIGIBILITY_SNAPSHOT
+    incremental_time_filter_column_id: UPDATED_AT
+    rule_ids:
+      - RL_ZERO_COUNT_CHECK
+      - RL_MAX_VALUE_RANGE_CHECK:
+          p_column_name: pri_itd_cnt
+          lower_bound: 10
+          upper_bound: 1000
+  bind_column_checks:
+    entity_id: TEST_MONTHLY_MEMBER_ELIGIBILITY_SNAPSHOT
+    incremental_time_filter_column_id: UPDATED_AT
+    row_filter_id: NONE
+    reference_columns_id: TEST_DATA_REFERENCE_COLUMNS
+    rule_ids:
+      - RL_NOT_NULL_CHECK:
+          p_column_name: group_id
+      - RL_VALUE_NOT_IN_TBL_CHECK:
+          p_column_name: member_id
+          p_ref_column: member_id
+          p_ref_table: DW.dim_member
+  bind_data_checks:
+    entity_id: TEST_MONTHLY_MEMBER_ELIGIBILITY_SNAPSHOT
+    incremental_time_filter_column_id: UPDATED_AT
+    row_filter_id: RF_MONTHLY_MEMBER_ELIGIBILITY_SNAPSHOT
+    #reference_columns_id: TEST_DATA_REFERENCE_COLUMNS
+    rule_ids:
+#      - RL_DUPLICATE_CHECK:
+#          tgt_tbl_key_column: group_id,snapshot_year_month,eligibility_reporting_dt
+#          output_row_limit: 30
+      - RL_DAILY_VS_MONTHLY_METRIC_COMPARISON_CHECK:
+          tgt_tbl_key_column: group_id
+          tgt_tbl_metric_column: ehr_completed_membership_incremental_cnt
+          src_table_name: data_science_edw.daily_member_eligibility_snapshot
+          src_tbl_key_column: group_id
+          src_tbl_metric_column: ehr_completed_membership_incremental_cnt
+          deviation_pct: 0.2
+          tgt_tbl_snapshot_column: snapshot_end_dt
+          src_tbl_snapshot_column: snapshot_dt
+          output_row_limit: 30
+      - RL_AGG_DAILY_VS_MONTHLY_METRIC_COMPARISON_CHECK:
+          tgt_tbl_metric_column: ehr_completed_membership_incremental_cnt
+          src_table_name: data_science_edw.daily_member_eligibility_snapshot
+          src_tbl_metric_column: ehr_completed_membership_incremental_cnt
+          deviation_pct: 0.2
+          tgt_tbl_snapshot_column: snapshot_end_dt
+          src_tbl_snapshot_column: snapshot_dt
+      - RL_SIX_MONTH_AVG_CHECK:
+          tgt_tbl_metric_column: ehr_completed_membership_incremental_cnt
+          src_table_name: data_science_edw.monthly_member_eligibility_snapshot
+          src_tbl_metric_column: ehr_completed_membership_incremental_cnt
+          deviation_pct: 0.3
+          tgt_tbl_snapshot_column: snapshot_end_dt
+
+

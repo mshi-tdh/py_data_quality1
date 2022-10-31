@@ -1,0 +1,222 @@
+rules:
+  RL_ZERO_COUNT_CHECK:
+    rule_type: RT_ENTITY_LEVEL
+    dimension: completeness
+    params:
+      custom_sql_statement: |-
+        select * from (select count(*) as record_count
+        from data)
+        where record_count > 0
+
+  RL_VALUE_NOT_IN_TBL_CHECK:
+    rule_type: RT_ATTRIBUTE_LEVEL
+    dimension: completeness
+    params:
+      custom_sql_arguments:
+        - p_column_name
+        - p_ref_column
+        - p_ref_table
+      custom_sql_statement: |-
+        select * from data
+        where p_column_name NOT IN (select p_ref_col from p_ref_table)
+
+  RL_MAX_VALUE_RANGE_CHECK:
+    rule_type: RT_ENTITY_LEVEL
+    dimension: accuracy
+    params:
+      custom_sql_arguments:
+        - p_column_name
+        - lower_bound
+        - upper_bound
+      custom_sql_statement: |-
+        select * from (select avg($p_column_name) as max_value
+        from data)
+        where max_value between $lower_bound and $upper_bound
+
+  RL_SUM_RANGE_CHECK:
+    rule_type: RT_ENTITY_LEVEL
+    dimension: accuracy
+    params:
+      custom_sql_arguments:
+        - p_column_name
+        - lower_bound
+        - upper_bound
+      custom_sql_statement: |-
+        select * from (select sum($p_column_name) as sum_value
+        from data)
+        where sum_value between lower_bound and upper_bound
+
+  RL_NOT_NULL_CHECK:
+    rule_type: RT_ATTRIBUTE_LEVEL
+    dimension: accuracy
+    params:
+      custom_sql_arguments:
+        - p_column_name
+      custom_sql_expr: |-
+        $p_column_name IS NOT NULL
+
+  RL_VALID_DATEFORMAT_YYYYMMDD_CHECK:
+    rule_type: RT_ATTRIBUTE_LEVEL
+    dimension: conformity
+    params:
+      column_name_as_arguments:
+        - p_column_name
+      pattern: |-
+        /^\d{4}(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])$/
+
+  RL_REFERENCE_TABLE_CHECK:
+    rule_type: RT_ATTRIBUTE_LEVEL
+    dimension: integrity
+    params:
+      sql_arguments:
+        - p_ref_schema_name
+        - p_ref_table_name
+        - p_ref_column_name
+        - p_target_tbl_column
+      sql_statement: |-
+        $p_target_tbl_column not in (select $ref_column_name from `$reg_schema_name.$ref_table_name`)
+        
+
+  RL_DUPLICATE_CHECK:
+    rule_type: RT_AGGREGATE_LEVEL
+    dimension: uniqueness
+    params:
+      custom_sql_arguments:
+        - tgt_tbl_key_column
+      custom_sql_statement: |-
+        select
+            $tgt_tbl_key_column
+            ,count(*) as aggregated_result
+          from data
+          group by $tgt_tbl_key_column
+          having count(*) > 1
+
+
+  RL_DAILY_VS_MONTHLY_METRIC_COMPARISON_CHECK:
+    rule_type: RT_AGGREGATE_LEVEL
+    dimension: accuracy
+    custom_sql_arguments:
+      - tgt_tbl_key_column
+      - tgt_tbl_metric_column
+      - src_table_name
+      - src_tbl_key_column
+      - src_tbl_metric_column
+      - deviation_pct
+      - tgt_tbl_snapshot_column
+      - src_tbl_snapshot_column
+      - tgt_tbl_snapshot_value
+    params:
+      custom_sql_statement: |-
+        with monthly as (
+          select $tgt_tbl_key_column, dt.year_month_day_str as snapshot_key,
+          sum($tgt_tbl_metric_column) as $tgt_tbl_metric_column
+          from data
+          inner join data_science_edw.dim_date dt
+          on (data.$tgt_tbl_snapshot_column = dt.month_end_dt)
+          where dt.year_month_day_str='$tgt_tbl_snapshot_value'
+          group by $tgt_tbl_key_column,snapshot_key
+          having sum($tgt_tbl_metric_column)>0
+        ),
+        daily as (
+          select $src_tbl_key_column, dt.year_month_day_str as snapshot_key,
+          sum($src_tbl_metric_column) as $src_tbl_metric_column
+          from $src_table_name daily
+          inner join data_science_edw.dim_date dt
+          on (daily.$src_tbl_snapshot_column BETWEEN dt.month_start_dt AND dt.month_end_dt)
+          where dt.year_month_day_str='$tgt_tbl_snapshot_value'
+          group by $src_tbl_key_column,snapshot_key
+          having sum($src_tbl_metric_column)>0
+        )
+        select 
+        monthly.$tgt_tbl_key_column,
+        monthly.snapshot_key,
+        monthly.$tgt_tbl_metric_column as tgt_metric_value,
+        daily.$src_tbl_metric_column as src_metric_value
+        from monthly 
+        inner join daily 
+        on (monthly.$tgt_tbl_key_column=daily.$src_tbl_key_column 
+        and monthly.snapshot_key=daily.snapshot_key)
+        where abs(1-(monthly.$tgt_tbl_metric_column/daily.$src_tbl_metric_column))>$deviation_pct
+        
+  RL_AGG_DAILY_VS_MONTHLY_METRIC_COMPARISON_CHECK:
+    rule_type: RT_AGGREGATE_LEVEL
+    dimension: accuracy
+    custom_sql_arguments:
+      - tgt_tbl_metric_column
+      - src_table_name
+      - src_tbl_metric_column
+      - deviation_pct
+      - tgt_tbl_snapshot_column
+      - src_tbl_snapshot_column
+      - tgt_tbl_snapshot_value
+    params:
+      custom_sql_statement: |-
+        with monthly as (
+          select dt.year_month_day_str as snapshot_key,
+          sum($tgt_tbl_metric_column) as $tgt_tbl_metric_column
+          from data
+          inner join data_science_edw.dim_date dt
+          on (data.$tgt_tbl_snapshot_column = dt.month_end_dt)
+          where dt.year_month_day_str='$tgt_tbl_snapshot_value'
+          group by snapshot_key
+          having sum($tgt_tbl_metric_column)>0
+        ),
+        daily as (
+          select dt.year_month_day_str as snapshot_key,
+          sum($src_tbl_metric_column) as $src_tbl_metric_column
+          from $src_table_name daily
+          inner join data_science_edw.dim_date dt
+          on (daily.$src_tbl_snapshot_column BETWEEN dt.month_start_dt AND dt.month_end_dt)
+          where dt.year_month_day_str='$tgt_tbl_snapshot_value'
+          group by snapshot_key
+          having sum($src_tbl_metric_column)>0
+        )
+        select 
+        monthly.snapshot_key,
+        monthly.$tgt_tbl_metric_column as tgt_metric_value,
+        daily.$src_tbl_metric_column as src_metric_value
+        from monthly 
+        inner join daily 
+        on (monthly.snapshot_key=daily.snapshot_key)
+        where abs(1-(monthly.$tgt_tbl_metric_column/daily.$src_tbl_metric_column))>$deviation_pct
+
+  RL_SIX_MONTH_AVG_CHECK:
+    rule_type: RT_AGGREGATE_LEVEL
+    dimension: accuracy
+    custom_sql_arguments:
+      - tgt_tbl_metric_column
+      - src_table_name
+      - src_tbl_metric_column
+      - deviation_pct
+      - tgt_tbl_snapshot_column
+      - tgt_tbl_snapshot_value
+    params:
+      custom_sql_statement: |-
+        with monthly as (
+          select dt.year_month_day_str as snapshot_key,
+          sum($tgt_tbl_metric_column) as $tgt_tbl_metric_column
+          from data 
+          inner join data_science_edw.dim_date dt
+          on (data.$tgt_tbl_snapshot_column = dt.month_end_dt)
+          where dt.year_month_day_str='$tgt_tbl_snapshot_value'
+          group by snapshot_key
+          having sum($tgt_tbl_metric_column)>0
+        ),
+        last_six_month as (
+          select dt.year_month_day_str as snapshot_key,
+          sum($tgt_tbl_metric_column)/6 as $tgt_tbl_metric_column
+          from data 
+          inner join data_science_edw.dim_date dt
+          on (data.$tgt_tbl_snapshot_column between add_months(dt.last_month_start_dt,-5) and dt.last_month_end_dt)
+          where dt.year_month_day_str='$tgt_tbl_snapshot_value'
+          group by snapshot_key
+          having sum($tgt_tbl_metric_column)>0
+        )
+        select 
+        monthly.snapshot_key,
+        monthly.$tgt_tbl_metric_column as tgt_metric_value,
+        last_six_month.$src_tbl_metric_column as src_metric_value
+        from monthly 
+        inner join last_six_month 
+        on (monthly.snapshot_key=last_six_month.snapshot_key)
+        where abs(1-(monthly.$tgt_tbl_metric_column/last_six_month.$src_tbl_metric_column))>$deviation_pct
